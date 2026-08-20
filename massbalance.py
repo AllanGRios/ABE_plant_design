@@ -72,7 +72,48 @@ def F1():
     set_stream("S18", CO2=S3[5], H2=S3[6])
     return
 
-def NRTL(x, T, paramenters):
+def NRTL(S4, T):
+    # Relative Molar Fractions
+    n1 = S4[2] / 58.08
+    n2 = S4[3] / 46.069
+    n3 = S4[4] / 18.015
+    nsum = n1 + n2 + n3
+    xi = np.array([n1/nsum, n2/nsum, n3/nsum])
+    N = len(xi)
+    # Binary Interaction Parameters
+    a = np.array([
+        [0, 1.079, 6.398], #Acetone - 0
+        [0.347, 0, 3.458], #Ethanol - 1
+        [0.054, 0.801, 0]  #Water - 2
+    ])
+    b = np.array([
+        [0, 479.1, 1809],  #Acetone - 0
+        [206.6, 0, 586.1], #Ethanol - 1
+        [420, 246.2, 0]    #Water - 2
+    ])
+    tau = a + b/T
+    # Intermolecular Energy Parameters
+    alpha = np.array([
+        [0.3, 0.3, 0.3],
+        [0.3, 0.3, 0.3],
+        [0.3, 0.3, 0.3]
+    ])
+    G = np.exp(-alpha * tau)
+    # Calculate ln(gamma) = term1 + term2
+    term1 = np.zeros(N)
+    term2 = np.zeros(N)
+    for i in range(N):
+        term1[i] = np.sum(xi * tau[:, i] * G[:,i]) / np.sum(xi * G[:, i])
+        sum_j = 0
+        for j in range(N):
+            sum_mj = np.sum(xi * tau[:,j] * G[:, j])
+            sum_kj = np.sum(xi * G[:, j])
+            sum_j+= (xi[j] * G[i, j] / sum_kj) * (tau[i,j] - sum_mj/sum_kj)
+        term2[i] = sum_j
+    ln_gamma = term1 + term2
+    gamma = np.exp(ln_gamma)
+    def LLE_solver(gamma, xi):
+        return
     return
 
 def Dec1():
@@ -96,6 +137,7 @@ def Dec1():
 
 system_input(63.13)
 Dec1()
+NRTL(Streams['S4'], 310)
 
 print("kg/h   S, B, A, E, W, CO2, H2, NH4OH, Salts")
 for a in Streams:
