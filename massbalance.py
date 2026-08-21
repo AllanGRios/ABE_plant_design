@@ -77,33 +77,36 @@ def NRTL(stream, temperature):
     S = stream
     def minor_NRTL(S, T):
         # experimental LLE data
-        xB_org = 0.488
-        xB_aq = 0.0191
-        xW_org = 0.512
-        xW_aq = 0.9809
+        xi = np.array([
+            [0.488, 0.0191], #BtOH [org, aq]    |i  ---> j
+            [0.512, 0.9809] #Water [org, aq]    v
+        ])
         #initial guess
         tau = np.array([
             [0, 1], # Butanol(1) - Water(2)
             [1, 0]  # Water(2) - Butanol(1)
         ])
-        N = len(tau)
+        N = len(xi)
         alpha = np.full(N, 0.3)
         G = np.exp(-alpha * tau)
         # NRTL
         term1 = np.zeros(N)
         term2 = np.zeros(N)
-        for i in range(N):
-            term1[i] = np.sum(xi * tau[:, i] * G[:, i]) / np.sum(xi * G[:, i])
-            sum_j = 0
-            for j in range(N):
-                sum_mj = np.sum(xi * tau[:, j] * G[:, j])
-                sum_kj = np.sum(xi * G[:, j])
-                sum_j += (xi[j] * G[i, j] / sum_kj) * (tau[i, j] - sum_mj / sum_kj)
-            term2[i] = sum_j
-        ln_gamma = term1 + term2
-        gamma = np.exp(ln_gamma)
-
-        return
+        gamma = np.zeros((N,2))
+        for phase in range(xi.shape[1]): # for each phase (org and aq)
+            x = xi[:, phase] # mol frac is the current phase
+            for i in range(N): # for each component(row) in the array tau (0, 1)
+                term1[i] = np.sum(x * tau[:, i] * G[:, i]) / np.sum(x * G[:, i]) #term1 vector position is calculated by the column(j) of the current component(i)
+                sum_j = 0
+                for j in range(N): # for every column repeated the number of times = items in xi (4)
+                    sum_mj = np.sum(x * tau[:, j] * G[:, j]) # add up every x in the current phase * the columns of tau and G excluding the current one
+                    sum_kj = np.sum(x * G[:, j])
+                    sum_j += (x[j] * G[i, j] / sum_kj) * (tau[i, j] - sum_mj / sum_kj)
+                term2[i] = sum_j
+            ln_gamma = term1 + term2
+            gamma[:, phase] = np.exp(ln_gamma)
+        print(gamma)
+        return gamma
     def major_NRTL(S, T):
         # Relative Molar Fractions
         n1 = S[2] / 58.08
@@ -147,6 +150,8 @@ def NRTL(stream, temperature):
         return
     def LLE_solver():
         return
+
+    minor_NRTL(S, T)
     return
 
 def Dec1():
@@ -170,6 +175,7 @@ def Dec1():
 
 system_input(63.13)
 Dec1()
+NRTL(Streams['S4'], 310)
 
 print("kg/h   S, B, A, E, W, CO2, H2, NH4OH, Salts")
 for a in Streams:
