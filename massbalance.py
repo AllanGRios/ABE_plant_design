@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.optimize import root
 
 R = 0.08206 #atm/J/k
 Streams = {
@@ -75,38 +76,53 @@ def F1():
 def NRTL(stream, temperature):
     T = temperature
     S = stream
-    def minor_NRTL(S, T):
+    def minor_NRTL(tau_vars):
         # experimental LLE data
         xi = np.array([
             [0.488, 0.0191], #BtOH [org, aq]    |i  ---> j
             [0.512, 0.9809] #Water [org, aq]    v
         ])
+        def error_function(tau_vars):
+            # initial guess
+            tau = np.array([
+                [0, tau_vars[0]], # Butanol(1) - Water(2)
+                [tau_vars[1], 0]  # Water(2) - Butanol(1)
+            ])
+            N = len(xi)
+            alpha = np.full((N, N), 0.3)
+            G = np.exp(-alpha * tau)
+            # NRTL
+            gamma = np.zeros((N,2))
+            for phase in range(xi.shape[1]): # for each phase (org and aq)
+                x = xi[:, phase] # mol frac is the current phase
+                term1 = np.zeros(N)
+                term2 = np.zeros(N)
+                for i in range(N): # for each component(row) in the array tau (0, 1)
+                    term1[i] = np.sum(x * tau[:, i] * G[:, i]) / np.sum(x * G[:, i]) #term1 vector position is calculated by the column(j) of the current component(i)
+                    sum_j = 0
+                    for j in range(N): # for every column repeated the number of times = items in xi (4)
+                        sum_mj = np.sum(x * tau[:, j] * G[:, j]) # add up every x in the current phase * the columns of tau and G excluding the current one
+                        sum_kj = np.sum(x * G[:, j])
+                        sum_j += (x[j] * G[i, j] / sum_kj) * (tau[i, j] - sum_mj / sum_kj)
+                    term2[i] = sum_j
+                ln_gamma = term1 + term2
+                gamma[:, phase] = np.exp(ln_gamma) #make a matrix of initial gamma values
+            error = xi[:, 0] * gamma[:, 0] - xi[:, 1] * gamma[:, 1]
+            return error
         #initial guess
-        tau = np.array([
-            [0, 1], # Butanol(1) - Water(2)
-            [1, 0]  # Water(2) - Butanol(1)
-        ])
-        N = len(xi)
-        alpha = np.full(N, 0.3)
-        G = np.exp(-alpha * tau)
-        # NRTL
-        term1 = np.zeros(N)
-        term2 = np.zeros(N)
-        gamma = np.zeros((N,2))
-        for phase in range(xi.shape[1]): # for each phase (org and aq)
-            x = xi[:, phase] # mol frac is the current phase
-            for i in range(N): # for each component(row) in the array tau (0, 1)
-                term1[i] = np.sum(x * tau[:, i] * G[:, i]) / np.sum(x * G[:, i]) #term1 vector position is calculated by the column(j) of the current component(i)
-                sum_j = 0
-                for j in range(N): # for every column repeated the number of times = items in xi (4)
-                    sum_mj = np.sum(x * tau[:, j] * G[:, j]) # add up every x in the current phase * the columns of tau and G excluding the current one
-                    sum_kj = np.sum(x * G[:, j])
-                    sum_j += (x[j] * G[i, j] / sum_kj) * (tau[i, j] - sum_mj / sum_kj)
-                term2[i] = sum_j
-            ln_gamma = term1 + term2
-            gamma[:, phase] = np.exp(ln_gamma)
-        print(gamma)
-        return gamma
+        tau_guess = [1, 1]
+        sol = root(error_function, tau_guess, method="hybr", tol=1e-3)
+        if sol.success:
+            optimal_tau_var = sol.x
+            final_tau = np.array([
+                [0, optimal_tau_var[0]],
+                [optimal_tau_var[1], 0]
+            ])
+            error = error_function(optimal_tau_var)
+            print(error, final_tau)
+            return final_tau
+        else:
+            return None
     def major_NRTL(S, T):
         # Relative Molar Fractions
         n1 = S[2] / 58.08
@@ -151,7 +167,7 @@ def NRTL(stream, temperature):
     def LLE_solver():
         return
 
-    minor_NRTL(S, T)
+    minor_NRTL([1, 1])
     return
 
 def Dec1():
@@ -176,9 +192,9 @@ def Dec1():
 system_input(63.13)
 Dec1()
 NRTL(Streams['S4'], 310)
-
+"""
 print("kg/h   S, B, A, E, W, CO2, H2, NH4OH, Salts")
 for a in Streams:
     print(f"{a}, {Streams[a]} = {sum(Streams[a])}")
 
-print(f"mass balance: in-out {sum(Streams['S3'])  } - {sum(Streams['S4']) + sum(Streams['S18'])}")
+print(f"mass balance: in-out {sum(Streams['S3'])  } - {sum(Streams['S4']) + sum(Streams['S18'])}")"""
