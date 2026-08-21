@@ -76,13 +76,13 @@ def F1():
 def NRTL(stream, temperature):
     T = temperature
     S = stream
-    def minor_NRTL(tau_vars):
+    def minor_NRTL():
         # experimental LLE data
         xi = np.array([
             [0.488, 0.0191], #BtOH [org, aq]    |i  ---> j
             [0.512, 0.9809] #Water [org, aq]    v
         ])
-        def error_function(tau_vars):
+        def calculation(tau_vars):
             # initial guess
             tau = np.array([
                 [0, tau_vars[0]], # Butanol(1) - Water(2)
@@ -107,6 +107,9 @@ def NRTL(stream, temperature):
                     term2[i] = sum_j
                 ln_gamma = term1 + term2
                 gamma[:, phase] = np.exp(ln_gamma) #make a matrix of initial gamma values
+            return gamma, tau
+        def error_function(tau_vars):
+            gamma, _ = calculation(tau_vars)
             error = xi[:, 0] * gamma[:, 0] - xi[:, 1] * gamma[:, 1]
             return error
         #initial guess
@@ -114,13 +117,9 @@ def NRTL(stream, temperature):
         sol = root(error_function, tau_guess, method="hybr", tol=1e-3)
         if sol.success:
             optimal_tau_var = sol.x
-            final_tau = np.array([
-                [0, optimal_tau_var[0]],
-                [optimal_tau_var[1], 0]
-            ])
-            error = error_function(optimal_tau_var)
-            print(error, final_tau)
-            return final_tau
+            final_gamma, final_tau = calculation(optimal_tau_var)
+            error = calculation(optimal_tau_var)
+            return final_gamma
         else:
             return None
     def major_NRTL(S, T):
@@ -163,11 +162,14 @@ def NRTL(stream, temperature):
             term2[i] = sum_j
         ln_gamma = term1 + term2
         gamma = np.exp(ln_gamma)
-        return
+        return gamma
     def LLE_solver():
         return
-
-    minor_NRTL([1, 1])
+    # Assume EtOH / BtOH, Actn / BtOH fully miscible therefore gamma = 1
+    gamma_BW = minor_NRTL()
+    gamma_others = major_NRTL(S, T)
+    print(gamma_BW)
+    print(gamma_others)
     return
 
 def Dec1():
