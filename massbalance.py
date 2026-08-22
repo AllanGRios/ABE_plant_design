@@ -73,10 +73,34 @@ def F1():
     set_stream("S18", CO2=S3[5], H2=S3[6])
     return
 
-def NRTL(stream, temperature):
+def NRTL(x, T, alpha, tau=None, a=None, b=None):
+    N = len(x)
+    if tau is None:
+        tau = a + b/T
+        G = np.exp(-alpha * tau)
+    elif a is None and b is None:
+        G = np.exp(-alpha * tau)
+    else:
+        print("wrong input:\n if tau = None then a, b must be input\n if a,b = None then tau must be input")
+
+    for i in range(N):  # for each component(row) in the array tau (0, 1)
+        term1[i] = np.sum(x * tau[:, i] * G[:, i]) / np.sum(
+            x * G[:, i])  # term1 vector position is calculated by the column(j) of the current component(i)
+        sum_j = 0
+        for j in range(N):  # for every column repeated the number of times = items in xi (4)
+            sum_mj = np.sum(x * tau[:, j] * G[:,
+                                            j])  # add up every x in the current phase * the columns of tau and G excluding the current one
+            sum_kj = np.sum(x * G[:, j])
+            sum_j += (x[j] * G[i, j] / sum_kj) * (tau[i, j] - sum_mj / sum_kj)
+        term2[i] = sum_j
+    ln_gamma = term1 + term2
+    gamma[:, phase] = np.exp(ln_gamma)
+    return gamma
+
+def function(stream, temperature):
     T = temperature
     S = stream
-    def minor_NRTL():
+    def nonlinear_regression():
         # experimental LLE data
         xi = np.array([
             [0.488, 0.0191], #BtOH [org, aq]    |i  ---> j
@@ -119,7 +143,7 @@ def NRTL(stream, temperature):
             optimal_tau_var = sol.x
             final_gamma, final_tau = calculation(optimal_tau_var)
             error = calculation(optimal_tau_var)
-            return final_gamma
+            return final_gamma # BtOH, Water [org, aq]
         else:
             return None
     def major_NRTL(S, T):
@@ -163,13 +187,15 @@ def NRTL(stream, temperature):
         ln_gamma = term1 + term2
         gamma = np.exp(ln_gamma)
         return gamma
-    def LLE_solver():
+    def LLE_solver(gamma_BW, gamma_others):
+        gamma = np.array([
+            [], # B
+            [], # A
+            [], # E
+            []  # W
+        ])
         return
     # Assume EtOH / BtOH, Actn / BtOH fully miscible therefore gamma = 1
-    gamma_BW = minor_NRTL()
-    gamma_others = major_NRTL(S, T)
-    print(gamma_BW)
-    print(gamma_others)
     return
 
 def Dec1():
@@ -193,7 +219,6 @@ def Dec1():
 
 system_input(63.13)
 Dec1()
-NRTL(Streams['S4'], 310)
 """
 print("kg/h   S, B, A, E, W, CO2, H2, NH4OH, Salts")
 for a in Streams:
