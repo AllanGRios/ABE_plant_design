@@ -105,47 +105,26 @@ def NRTL(x, T, tau=None, a=None, b=None):
         gamma[:, phase] = np.exp(ln_gamma)
     return gamma, tau
 
-def function(stream, temperature):
+def composition_calculator(stream, temperature):
     T = temperature
     S = stream
-    def nonlinear_regression():
+    # Find Gamma BtOH/Water
+    def unknown_components(T):
         # experimental LLE data
         xi = np.array([
             [0.488, 0.0191], #BtOH [org, aq]
             [0.512, 0.9809], #Water [org, aq]
         ])
-        def calculation(tau_vars):
+        def nonlinear_regression(tau_vars):
             # initial guess
             tau = np.array([
                 [0, tau_vars[0]], # Butanol(1) - Water(2)
                 [tau_vars[1], 0]  # Water(2) - Butanol(1)
             ])
-            gamma, tau = NRTL(xi, 310, tau=tau)
-            """N = xi.shape[0]
-            P = xi.shape[1]
-            alpha = np.full((N, P), 0.3)
-            print(alpha)
-            G = np.exp(-alpha * tau)
-            # NRTL
-            gamma = np.zeros((N,N))
-            print(gamma)
-            for phase in range(xi.shape[1]): # for each phase (org and aq)
-                x = xi[:, phase] # mol frac is the current phase
-                term1 = np.zeros(N)
-                term2 = np.zeros(N)
-                for i in range(N): # for each component(row) in the array tau (0, 1)
-                    term1[i] = np.sum(x * tau[:, i] * G[:, i]) / np.sum(x * G[:, i]) #term1 vector position is calculated by the column(j) of the current component(i)
-                    sum_j = 0
-                    for j in range(N): # for every column repeated the number of times = items in xi (4)
-                        sum_mj = np.sum(x * tau[:, j] * G[:, j]) # add up every x in the current phase * the columns of tau and G excluding the current one
-                        sum_kj = np.sum(x * G[:, j])
-                        sum_j += (x[j] * G[i, j] / sum_kj) * (tau[i, j] - sum_mj / sum_kj)
-                    term2[i] = sum_j
-                ln_gamma = term1 + term2
-                gamma[:, phase] = np.exp(ln_gamma) #make a matrix of initial gamma values"""
+            gamma, tau = NRTL(xi, T, tau=tau)
             return gamma, tau
         def error_function(tau_vars):
-            gamma, _ = calculation(tau_vars)
+            gamma, _ = nonlinear_regression(tau_vars)
             error = xi[:, 0] * gamma[:, 0] - xi[:, 1] * gamma[:, 1]
             return error
         #initial guess
@@ -153,12 +132,13 @@ def function(stream, temperature):
         sol = root(error_function, tau_guess, method="hybr", tol=1e-3)
         if sol.success:
             optimal_tau_var = sol.x
-            final_gamma, final_tau = calculation(optimal_tau_var)
-            error = calculation(optimal_tau_var)
-            return final_gamma # BtOH, Water [org, aq]
+            final_gamma, final_tau = nonlinear_regression(optimal_tau_var)
+            error = nonlinear_regression(optimal_tau_var)
+            return final_gamma, final_tau # BtOH, Water [org, aq]
         else:
             return None
-    def major_NRTL(S, T):
+    # Find Gamma EtOH/Actn/Water
+    def known_components(S, T):
         # Relative Molar Fractions
         n1 = S[2] / 58.08
         n2 = S[3] / 46.069
@@ -169,7 +149,6 @@ def function(stream, temperature):
             [n2/nsum],
             [n3/nsum]
         ])
-        """N = len(xi)"""
         # Binary Interaction Parameters
         a = np.array([
             [0, 1.079, 6.398], #Acetone - 0
@@ -181,40 +160,23 @@ def function(stream, temperature):
             [206.6, 0, 586.1], #Ethanol - 1
             [420, 246.2, 0]    #Water - 2
         ])
-        """tau = a + b/T
-        # Intermolecular Energy Parameters
-        alpha = np.array([
-            [0.3, 0.3, 0.3],
-            [0.3, 0.3, 0.3],
-            [0.3, 0.3, 0.3]
-        ])
-        G = np.exp(-alpha * tau)
-        # Calculate ln(gamma) = term1 + term2
-        term1 = np.zeros(N)
-        term2 = np.zeros(N)
-        for i in range(N):
-            term1[i] = np.sum(xi * tau[:, i] * G[:,i]) / np.sum(xi * G[:, i])
-            sum_j = 0
-            for j in range(N):
-                sum_mj = np.sum(xi * tau[:,j] * G[:, j])
-                sum_kj = np.sum(xi * G[:, j])
-                sum_j+= (xi[j] * G[i, j] / sum_kj) * (tau[i,j] - sum_mj/sum_kj)
-            term2[i] = sum_j
-        ln_gamma = term1 + term2
-        gamma = np.exp(ln_gamma)"""
         gamma, tau = NRTL(xi, T, a=a, b=b)
         return gamma, tau
-    def LLE_solver(gamma_BW, gamma_others):
+    # Use Gamma to find xi' and xi"
+    def LLE_solver():
+        gamma_uc, tau_uc = unknown_components(T)
+        gamma_kc, tau_kc = known_components(S, T)
+        print(gamma_uc)
+        print(gamma_kc)
         gamma = np.array([
-            [], # B
-            [], # A
-            [], # E
-            []  # W
+            [1], # B
+            [1], # A
+            [1], # E
+            [1]  # W
         ])
         return
     # Assume EtOH / BtOH, Actn / BtOH fully miscible therefore gamma = 1
-    print(nonlinear_regression())
-    print(major_NRTL(S, T)[0])
+    LLE_solver()
     return
 
 def Dec1():
@@ -237,7 +199,7 @@ def Dec1():
     B_aq = C_aq * S4[1]
 
 system_input(63.13)
-function(Streams['S4'], 310)
+composition_calculator(Streams['S4'], 310)
 
 """
 print("kg/h   S, B, A, E, W, CO2, H2, NH4OH, Salts")
