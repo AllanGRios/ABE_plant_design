@@ -166,14 +166,30 @@ def composition_calculator(stream, temperature):
     def LLE_solver():
         gamma_uc, tau_uc = unknown_components(T)
         gamma_kc, tau_kc = known_components(S, T)
-        print(gamma_uc)
-        print(gamma_kc)
-        gamma = np.array([
-            [1], # B
-            [1], # A
-            [1], # E
-            [1]  # W
+        # Interaction parameter tau matrix
+        BA = 331.72/T
+        BE = 173.2/T
+        AB = -120.47/T
+        EB = -90.84/T
+        tau = np.array([
+            [0, BA, BE, tau_uc[0,1]],  # B
+            [AB, 0, tau_kc[0,1], tau_kc[0,2]],  # A
+            [EB, tau_kc[1,0], 0, tau_kc[1,2]],  # E
+            [tau_uc[1,0], tau_kc[2,0], tau_kc[2,1], 0]  # W
         ])
+        # Stream Composition zi
+        nB = S[1] / 74.123
+        nA = S[2] / 58.08
+        nE = S[3] / 46.069
+        nW = S[4] / 18.015
+        nsum = nB + nA + nE + nW
+        zi = np.array([
+            [nB/nsum], [nA/nsum], [nE/nsum], [nW/nsum]
+        ])
+        N = zi.shape[0]
+        phases = 2
+        for P in range(phases):
+            pass
         return
     # Assume EtOH / BtOH, Actn / BtOH fully miscible therefore gamma = 1
     LLE_solver()
