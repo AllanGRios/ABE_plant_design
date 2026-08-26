@@ -115,7 +115,7 @@ def composition_calculator(stream, temperature):
             [0.488, 0.0191], #BtOH [org, aq]
             [0.512, 0.9809], #Water [org, aq]
         ])
-        def nonlinear_regression(tau_vars):
+        def calculate_gamma(tau_vars):
             # initial guess
             tau = np.array([
                 [0, tau_vars[0]], # Butanol(1) - Water(2)
@@ -124,7 +124,7 @@ def composition_calculator(stream, temperature):
             gamma, tau = NRTL(xi, T, tau=tau)
             return gamma, tau
         def error_function(tau_vars):
-            gamma, _ = nonlinear_regression(tau_vars)
+            gamma, _ = calculate_gamma(tau_vars)
             error = xi[:, 0] * gamma[:, 0] - xi[:, 1] * gamma[:, 1]
             return error
         #initial guess
@@ -132,8 +132,8 @@ def composition_calculator(stream, temperature):
         sol = root(error_function, tau_guess, method="hybr", tol=1e-3)
         if sol.success:
             optimal_tau_var = sol.x
-            final_gamma, final_tau = nonlinear_regression(optimal_tau_var)
-            error = nonlinear_regression(optimal_tau_var)
+            final_gamma, final_tau = calculate_gamma(optimal_tau_var)
+            error = calculate_gamma(optimal_tau_var)
             return final_gamma, final_tau # BtOH, Water [org, aq]
         else:
             return None
@@ -187,9 +187,24 @@ def composition_calculator(stream, temperature):
             [nB/nsum], [nA/nsum], [nE/nsum], [nW/nsum]
         ])
         N = zi.shape[0]
-        phases = 2
-        for P in range(phases):
-            pass
+        # Initial Composition Guess
+        xi_guess = np.full((N,2),0.5)
+        # Minimize error to find root
+        def error_function_LLE(xi_guess):
+            xi_guess.reshape(N,2)
+            ones = np.full((N, 1), 1)
+            gamma, _ = NRTL(xi_guess, T, tau=tau)
+            isoactivity_error = xi_guess[:,0] * gamma[:,0] - xi_guess[:,1] * gamma[:,1] # xi' * γ' - xi" * γ" = ε
+            mol_balance_error = zi - xi_guess[:,0] - xi_guess[:,1]
+            mass_balance_error_org = ones - xi_guess[:,0]
+            mass_balance_error_aq = ones - xi_guess[:,1]
+            return [isoactivity_error, mol_balance_error, mass_balance_error_org, mass_balance_error_aq]
+        sol = root(error_function_LLE, xi_guess, method="hybr", tol=1e-3)
+        if sol.success:
+            optimal_xi = sol.x
+            return
+        else:
+            return None
         return
     # Assume EtOH / BtOH, Actn / BtOH fully miscible therefore gamma = 1
     LLE_solver()
