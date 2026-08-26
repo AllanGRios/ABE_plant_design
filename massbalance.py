@@ -1,5 +1,6 @@
 import numpy as np
 from scipy.optimize import root
+from scipy.optimize import least_squares
 
 R = 0.08206 #atm/J/k
 Streams = {
@@ -162,7 +163,7 @@ def composition_calculator(stream, temperature):
         ])
         gamma, tau = NRTL(xi, T, a=a, b=b)
         return gamma, tau
-    # Use Gamma to find xi' and xi"
+    # Use Gamma to find x0' and x0"
     def LLE_solver():
         gamma_uc, tau_uc = unknown_components(T)
         gamma_kc, tau_kc = known_components(S, T)
@@ -178,30 +179,51 @@ def composition_calculator(stream, temperature):
             [tau_uc[1,0], tau_kc[2,0], tau_kc[2,1], 0]  # W
         ])
         # Stream Composition zi
-        nB = S[1] / 74.123
-        nA = S[2] / 58.08
-        nE = S[3] / 46.069
-        nW = S[4] / 18.015
+        MW = [74.123, 58.08, 46.069, 18.015] #B A E W kg/kmol
+        nB = S[1] / MW[0]
+        nA = S[2] / MW[1]
+        nE = S[3] / MW[2]
+        nW = S[4] / MW[3]
         nsum = nB + nA + nE + nW
         zi = np.array([
             [nB/nsum], [nA/nsum], [nE/nsum], [nW/nsum]
         ])
         N = zi.shape[0]
         # Initial Composition Guess
-        xi_guess = np.full((N,2),0.5)
+        xi_guess = np.array([
+            [0.488, 0.0191],  # B
+            [0.1, 0.05],      # A
+            [0.2, 0.1],     # E
+            [0.512, 0.9809],      # W
+        ])
+        xi_guess = xi_guess.flatten()
+        beta_guess = 0.219
+        x0_guess = np.concatenate([xi_guess, [beta_guess]])
         # Minimize error to find root
-        def error_function_LLE(xi_guess):
-            xi_guess.reshape(N,2)
+        def error_function_LLE(x0_guess):
+            xi = x0_guess[:8].reshape(N, 2)
+            beta = x0_guess[8]
             ones = np.full((N, 1), 1)
-            gamma, _ = NRTL(xi_guess, T, tau=tau)
-            isoactivity_error = xi_guess[:,0] * gamma[:,0] - xi_guess[:,1] * gamma[:,1] # xi' * γ' - xi" * γ" = ε
-            mol_balance_error = zi - xi_guess[:,0] - xi_guess[:,1]
-            mass_balance_error_org = ones - xi_guess[:,0]
-            mass_balance_error_aq = ones - xi_guess[:,1]
-            return [isoactivity_error, mol_balance_error, mass_balance_error_org, mass_balance_error_aq]
-        sol = root(error_function_LLE, xi_guess, method="hybr", tol=1e-3)
+            gamma, _ = NRTL(xi, T, tau=tau)
+            isoactivity_error = xi[:,0] * gamma[:,0] - xi[:,1] * gamma[:,1] # x0' * γ' - x0" * γ" = ε
+            mol_balance_error = zi[:,0] - beta * xi[:,0] - (1 - beta) * xi[:,1]
+            mass_balance_error_org = np.array([np.sum(xi[:,0]) - 1])
+            error = np.concatenate([isoactivity_error, mol_balance_error, mass_balance_error_org])
+            return error
+        #sol = root(error_function_LLE, x0_guess, method="hybr", tol=1e-3)
+        lower = np.zeros(9)
+        upper = np.concatenate([np.ones(8),[1]])
+        sol = least_squares(error_function_LLE, x0_guess, bounds = (lower, upper))
         if sol.success:
-            optimal_xi = sol.x
+            final_xi = sol.x[:8].reshape(N,2)
+            final_beta = sol.x[8]
+            mass_org = final_xi[:,0]* MW
+            w_org = mass_org / np.sum(mass_org)
+            mass_aq = final_xi[:, 1] * MW
+            w_aq = mass_aq / np.sum(mass_aq)
+            print(final_beta)
+            print(w_aq)
+            print(w_org)
             return
         else:
             return None
