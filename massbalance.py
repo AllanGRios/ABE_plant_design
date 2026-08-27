@@ -1,4 +1,5 @@
 import numpy as np
+import thermodynamics as td
 from scipy.optimize import root
 from scipy.optimize import least_squares
 
@@ -74,38 +75,6 @@ def F1():
     set_stream("S18", CO2=S3[5], H2=S3[6])
     return
 
-# Generic NRTL function
-def NRTL(x, T, tau=None, a=None, b=None):
-    N = x.shape[0] # Rows(Components)
-    P = x.shape[1] # Columns(Phases)
-    # alpha, tau, G = NxN and x, gamma = NxP
-    alpha = np.full((N, N), 0.3)
-    if tau is None:
-        tau = a + b/T
-        G = np.exp(-alpha * tau)
-    elif a is None and b is None:
-        G = np.exp(-alpha * tau)
-    else:
-        print("wrong input:\n if tau = None then a, b must be input\n if a,b = None then tau must be input")
-    gamma = np.zeros((N, P))
-    for phase in range(x.shape[1]):
-        xi = x[:, phase]  # mol frac is the current phase
-        term1 = np.zeros(N)
-        term2 = np.zeros(N)
-        for i in range(N):  # for each component(row) in the array tau (0, 1)
-            term1[i] = np.sum(xi * tau[:, i] * G[:, i]) / np.sum(
-                xi * G[:, i])  # term1 vector position is calculated by the column(j) of the current component(i)
-            sum_j = 0
-            for j in range(N):  # for every column repeated the number of times = items in xi (4)
-                sum_mj = np.sum(xi * tau[:, j] * G[:,
-                                                j])  # add up every x in the current phase * the columns of tau and G excluding the current one
-                sum_kj = np.sum(xi * G[:, j])
-                sum_j += (xi[j] * G[i, j] / sum_kj) * (tau[i, j] - sum_mj / sum_kj)
-            term2[i] = sum_j
-        ln_gamma = term1 + term2
-        gamma[:, phase] = np.exp(ln_gamma)
-    return gamma, tau
-
 def composition_calculator(stream, temperature):
     T = temperature
     S = stream
@@ -122,7 +91,7 @@ def composition_calculator(stream, temperature):
                 [0, tau_vars[0]], # Butanol(1) - Water(2)
                 [tau_vars[1], 0]  # Water(2) - Butanol(1)
             ])
-            gamma, tau = NRTL(xi, T, tau=tau)
+            gamma, tau = td.NRTL(xi, T, tau=tau)
             return gamma, tau
         def error_function(tau_vars):
             gamma, _ = calculate_gamma(tau_vars)
@@ -161,7 +130,7 @@ def composition_calculator(stream, temperature):
             [206.6, 0, 586.1], #Ethanol - 1
             [420, 246.2, 0]    #Water - 2
         ])
-        gamma, tau = NRTL(xi, T, a=a, b=b)
+        gamma, tau = td.NRTL(xi, T, a=a, b=b)
         return gamma, tau
     # Use Gamma to find x0' and x0"
     def LLE_solver():
@@ -179,7 +148,7 @@ def composition_calculator(stream, temperature):
             [tau_uc[1,0], tau_kc[2,0], tau_kc[2,1], 0]  # W
         ])
         # Stream Composition zi
-        MW = [74.123, 58.08, 46.069, 18.015] #B A E W kg/kmol
+        MW = np.array([74.123, 58.08, 46.069, 18.015]) #B A E W kg/kmol
         nB = S[1] / MW[0]
         nA = S[2] / MW[1]
         nE = S[3] / MW[2]
@@ -188,7 +157,6 @@ def composition_calculator(stream, temperature):
         zi = np.array([
             [nB/nsum], [nA/nsum], [nE/nsum], [nW/nsum]
         ])
-        N = zi.shape[0]
         # Initial Composition Guess
         xi_guess = np.array([
             [0.488, 0.0191],  # B
@@ -196,38 +164,13 @@ def composition_calculator(stream, temperature):
             [0.2, 0.1],     # E
             [0.512, 0.9809],      # W
         ])
-        xi_guess = xi_guess.flatten()
         beta_guess = 0.219
-        x0_guess = np.concatenate([xi_guess, [beta_guess]])
-        # Minimize error to find root
-        def error_function_LLE(x0_guess):
-            xi = x0_guess[:8].reshape(N, 2)
-            beta = x0_guess[8]
-            ones = np.full((N, 1), 1)
-            gamma, _ = NRTL(xi, T, tau=tau)
-            isoactivity_error = xi[:,0] * gamma[:,0] - xi[:,1] * gamma[:,1] # x0' * γ' - x0" * γ" = ε
-            mol_balance_error = zi[:,0] - beta * xi[:,0] - (1 - beta) * xi[:,1]
-            mass_balance_error_org = np.array([np.sum(xi[:,0]) - 1])
-            error = np.concatenate([isoactivity_error, mol_balance_error, mass_balance_error_org])
-            return error
-        #sol = root(error_function_LLE, x0_guess, method="hybr", tol=1e-3)
-        lower = np.zeros(9)
-        upper = np.concatenate([np.ones(8),[1]])
-        sol = least_squares(error_function_LLE, x0_guess, bounds = (lower, upper))
-        if sol.success:
-            final_xi = sol.x[:8].reshape(N,2)
-            final_beta = sol.x[8]
-            mass_org = final_xi[:,0]* MW
-            w_org = mass_org / np.sum(mass_org)
-            mass_aq = final_xi[:, 1] * MW
-            w_aq = mass_aq / np.sum(mass_aq)
-            print(final_beta)
-            print(w_aq)
-            print(w_org)
-            return
+        result = td.LLE_solver(zi, tau, T, xi_guess, beta_guess, MW)
+        if result is not None:
+            final_xi, final_beta, w_org, w_aq = result
         else:
-            return None
-        return
+            print("Failed")
+        return final_xi, final_beta, w_org, w_aq
     # Assume EtOH / BtOH, Actn / BtOH fully miscible therefore gamma = 1
     LLE_solver()
     return
