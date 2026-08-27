@@ -1,4 +1,6 @@
 import numpy as np
+from scipy.optimize import root
+from scipy.optimize import least_squares
 
 def NRTL(x, T, tau=None, a=None, b=None):
     N = x.shape[0] # Rows(Components)
@@ -30,3 +32,39 @@ def NRTL(x, T, tau=None, a=None, b=None):
         ln_gamma = term1 + term2
         gamma[:, phase] = np.exp(ln_gamma)
     return gamma, tau
+
+def LLE_solver(zi, tau, T, xi_guess, beta_guess, MW=None):
+    N = zi.shape[0]
+    unknowns = N*2 + 1
+    #initial flattening
+    xi_guess = xi_guess.flatten()
+    x0_guess = np.concatenate([xi_guess, [beta_guess]])
+
+    # Minimize error to find root
+    def error_function_LLE(x0_guess):
+        xi = x0_guess[:N*2].reshape(N, 2)
+        beta = x0_guess[N*2]
+        gamma, _ = NRTL(xi, T, tau=tau)
+        isoactivity_error = xi[:, 0] * gamma[:, 0] - xi[:, 1] * gamma[:, 1]  # x0' * γ' - x0" * γ" = ε
+        mol_balance_error = zi[:, 0] - beta * xi[:, 0] - (1 - beta) * xi[:, 1]
+        mass_balance_error_org = np.array([np.sum(xi[:, 0]) - 1])
+        error = np.concatenate([isoactivity_error, mol_balance_error, mass_balance_error_org])
+        return error
+
+   # least squares method solver
+    lower = np.zeros(unknowns)
+    upper = np.concatenate([np.ones(N*2), [1]])
+    sol = least_squares(error_function_LLE, x0_guess, bounds=(lower, upper))
+    if sol.success:
+        final_xi = sol.x[:8].reshape(N, 2)
+        final_beta = sol.x[8]
+        if MW is not None:
+            mass_org = final_xi[:, 0] * MW
+            w_org = mass_org / np.sum(mass_org)
+            mass_aq = final_xi[:, 1] * MW
+            w_aq = mass_aq / np.sum(mass_aq)
+            return final_xi, final_beta, w_org, w_aq
+        return final_xi, final_beta
+    else:
+        return None
+    return
