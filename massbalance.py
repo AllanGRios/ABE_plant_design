@@ -9,7 +9,7 @@ Streams = {
 }
 
 def set_stream(Sn=str, S = 0, B = 0, A = 0, E = 0, W = 0, CO2 = 0, H2 = 0, NH4OH = 0,NH4_salts = 0):
-    masses = [round(i, 2) for i in [S,B,A,E,W,CO2,H2,NH4OH,NH4_salts]]
+    masses = [float(round(i, 2)) for i in [S,B,A,E,W,CO2,H2,NH4OH,NH4_salts]]
     Streams[Sn] = masses
     return
 
@@ -67,15 +67,17 @@ def R1(v_broth):
     water = water + S1[4] + S2[4] - W
     set_stream("Waste", S=sugar, B=BtOH_waste, A=Actn_waste, E=EtOH_waste, W=water, CO2=CO2_dissolved, NH4_salts=NH4_salts)
     F1()
+    return
 
 def F1():
     #
     S3 = Streams["S3"]
     set_stream("S4", S=S3[0], B=S3[1], A=S3[2], E=S3[3], W=S3[4], NH4OH=S3[7], NH4_salts=S3[8])
     set_stream("S18", CO2=S3[5], H2=S3[6])
+    Dec1(310)
     return
 
-def composition_calculator(stream, temperature):
+def dec1_composition_calculator(stream, temperature):
     T = temperature
     S = stream
     # Find Gamma BtOH/Water
@@ -133,9 +135,9 @@ def composition_calculator(stream, temperature):
         gamma, tau = td.NRTL(xi, T, a=a, b=b)
         return gamma, tau
     # Use Gamma to find x0' and x0"
-    def LLE_solver():
-        gamma_uc, tau_uc = unknown_components(T)
-        gamma_kc, tau_kc = known_components(S, T)
+    def predicted_composition():
+        _, tau_uc = unknown_components(T)
+        __, tau_kc = known_components(S, T)
         # Interaction parameter tau matrix
         BA = 331.72/T
         BE = 173.2/T
@@ -171,35 +173,33 @@ def composition_calculator(stream, temperature):
         else:
             print("Failed")
         return final_xi, final_beta, w_org, w_aq
-    # Assume EtOH / BtOH, Actn / BtOH fully miscible therefore gamma = 1
-    LLE_solver()
+    return predicted_composition()
+
+def Dec1(operating_temp):
+    S4 = Streams["S4"]
+    MW = np.array([74.123, 58.08, 46.069, 18.015])
+    nsum = sum(S4[1:5:]/MW)
+    # Phase composition
+    xi, beta, w_org, w_aq = dec1_composition_calculator(S4, operating_temp)
+    mass_org = beta * nsum * np.sum(xi[:,0] * MW)
+    mass_aq = (1-beta) * nsum * np.sum(xi[:,1]* MW)
+    components_org = w_org * mass_org
+    components_aq = w_aq * mass_aq
+    set_stream("S5", B=components_org[0], A=components_org[1], E=components_org[2], W=components_org[3])
+    set_stream("S8", B=components_aq[0], A=components_aq[1], E=components_aq[2], W=components_aq[3])
+    #component mass balance incorrect and total mass balance incorrect
+    D1(373)
     return
 
-def Dec1():
-    S4 = Streams["S4"]
-    Total = sum(S4)
-    w_BtOH_in = S4[1]/Total
-    w_Water_in = S4[4]/Total
-    # Lever rule - Dec1 layer composition
-    C_aq = 0.0742 # empirical - BtOH in aqueous
-    C_org = 0.797 # empirical - BtOH in organic
-    w_aq = (C_org - w_BtOH_in) / (C_org - C_aq)
-    w_org = (w_BtOH_in - C_aq) / (C_org - C_aq)
-    m_org = Total * w_org
-    m_aq = Total * w_aq
-    #Assumption : BtOH distribution only relies on these weight fractions, the other components use NRTL model and the salts all remain in the aqueous layer.
-    #Organic Layer
-    B_org = C_org * S4[1]
-
-    #Aqueous Layer
-    B_aq = C_aq * S4[1]
+def D1(operating_temp):
+    S5 = Streams["S5"]
+    print(S5)
+    return
 
 system_input(63.13)
-composition_calculator(Streams['S4'], 310)
 
-"""
-print("kg/h   S, B, A, E, W, CO2, H2, NH4OH, Salts")
-for a in Streams:
-    print(f"{a}, {Streams[a]} = {sum(Streams[a])}")
+#print("kg/h   S, B, A, E, W, CO2, H2, NH4OH, Salts")
+#for a in Streams:
+    #print(f"{a}, {Streams[a]} = {sum(Streams[a])}")
 
-print(f"mass balance: in-out {sum(Streams['S3'])  } - {sum(Streams['S4']) + sum(Streams['S18'])}")"""
+#print(f"mass balance: in-out {sum(Streams['S4'])  } - {sum(Streams['S5']) + sum(Streams['S8'])}")

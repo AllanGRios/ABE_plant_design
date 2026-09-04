@@ -68,3 +68,28 @@ def LLE_solver(zi, tau, T, xi_guess, beta_guess, MW=None):
     else:
         return None
     return
+
+def fenske_multicomponent(zi=None, T=298, tau=None):
+    #if tau is not None:
+    tau = np.array([
+        [0, 2, 3],
+        [5, 0, 7],
+        [9, 10, 0]
+    ])
+    zi = np.array([
+        [2, 4, 5],
+        [3, 5, 9],
+        [8, 1, 3]
+    ])
+    N = zi.shape[0] # Components in feed
+    P = 2 # Phases (Vapor Liquid)
+    """
+     1. VLE NRTL get gamma values
+     2. Calculate relative volatitlity value for LK HK
+     3. calculate N+1 stages using fenske assuming total reflux"""
+    gamma, _ = NRTL(zi, T, tau=tau)
+    print(gamma)
+    #alpha = (gamma_LK * Pvap_LK) / (gamma_HK * Pvap_HK)
+    return
+
+fenske_multicomponent()
