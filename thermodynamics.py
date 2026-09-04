@@ -64,31 +64,44 @@ def LLE_solver(zi, tau, T, xi_guess, beta_guess, MW=None):
             mass_aq = final_xi[:, 1] * MW
             w_aq = mass_aq / np.sum(mass_aq)
             return final_xi, final_beta, w_org, w_aq
-        return final_xi, final_beta
+        else:
+            final_gamma, final_tau = NRTL(final_xi, T, tau=tau)
+            return final_xi, final_beta, final_gamma
     else:
-        return None
+        return
     return
 
-def fenske_multicomponent(zi=None, T=298, tau=None):
+def fenske_multicomponent(zi=None, tau=None, T=298, yx_guess=None, beta_guess=None, MW=None):
     #if tau is not None:
     tau = np.array([
-        [0, 2, 3],
-        [5, 0, 7],
-        [9, 10, 0]
+        [0, 2, 3, 4],
+        [5, 0, 7, 3],
+        [9, 10, 0, 2],
+        [2, 5, 6, 0]
     ])
     zi = np.array([
-        [2, 4, 5],
-        [3, 5, 9],
-        [8, 1, 3]
+        [2],
+        [3],
+        [8],
+        [9]
     ])
+    yx_guess = np.array([
+        [0.3, 0.02],
+        [0.2, 0.6],
+        [0.4, 0.08],
+        [0.1, 0.2]
+    ])
+    beta_guess = 0.07
     N = zi.shape[0] # Components in feed
     P = 2 # Phases (Vapor Liquid)
     """
      1. VLE NRTL get gamma values
      2. Calculate relative volatitlity value for LK HK
      3. calculate N+1 stages using fenske assuming total reflux"""
-    gamma, _ = NRTL(zi, T, tau=tau)
-    print(gamma)
+    yx,  beta, final_gamma = LLE_solver(zi, tau, T, yx_guess, beta_guess)
+    print(yx)
+    print(beta)
+    print(final_gamma)
     #alpha = (gamma_LK * Pvap_LK) / (gamma_HK * Pvap_HK)
     return
 
