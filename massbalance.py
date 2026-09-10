@@ -172,7 +172,7 @@ def dec1_composition_calculator(stream, temperature):
             final_xi, final_beta, w_org, w_aq = result
         else:
             print("Failed")
-        return final_xi, final_beta, w_org, w_aq
+        return final_xi, final_beta, w_org, w_aq, tau
     return predicted_composition()
 
 def Dec1(operating_temp):
@@ -180,7 +180,7 @@ def Dec1(operating_temp):
     MW = np.array([74.123, 58.08, 46.069, 18.015])
     nsum = sum(S4[1:5:]/MW)
     # Phase composition
-    xi, beta, w_org, w_aq = dec1_composition_calculator(S4, operating_temp)
+    xi, beta, w_org, w_aq, tau = dec1_composition_calculator(S4, operating_temp)
     mass_org = beta * nsum * np.sum(xi[:,0] * MW)
     mass_aq = (1-beta) * nsum * np.sum(xi[:,1]* MW)
     components_org = w_org * mass_org
@@ -188,12 +188,38 @@ def Dec1(operating_temp):
     set_stream("S5", B=components_org[0], A=components_org[1], E=components_org[2], W=components_org[3])
     set_stream("S8", B=components_aq[0], A=components_aq[1], E=components_aq[2], W=components_aq[3])
     #component mass balance incorrect and total mass balance incorrect
-    D1(373)
+    D1(0.578, 373)
     return
 
-def D1(operating_temp):
+def D1(w_D_btoh, operating_temp):
+    #azeotrope BtOH - Water ~ 0.578%wt BtOH (~0.25%mol)
     S5 = Streams["S5"]
-    print(S5)
+    F = sum(S5[1:5:])
+    # F = D + B, Fzi = Dxi + Wxi
+    w_D = np.array([
+        [w_D_btoh],#fix so w_D in mass fractions
+        [S5[2]/F],
+        [S5[3]/F],
+        [1 - w_D_btoh]
+    ])
+    w_B = np.array([
+        [1],
+        [0],
+        [0],
+        [0]
+    ])
+    w_F = np.array([
+        [S5[1]/F],
+        [S5[2]/F],
+        [S5[3]/F],
+        [S5[4]/F]
+    ])
+    D = F * (w_F - w_B) / (w_D - w_B)
+    W = F * (w_B - w_F) / (w_B - w_D)
+    print(F)
+    print(D)
+    print(W)
+
     return
 
 system_input(63.13)

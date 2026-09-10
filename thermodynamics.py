@@ -4,7 +4,10 @@ from scipy.optimize import least_squares
 
 def NRTL(x, T, tau=None, a=None, b=None):
     N = x.shape[0] # Rows(Components)
-    P = x.shape[1] # Columns(Phases)
+    try:
+        P = x.shape[1] # Columns(Phases)
+    except:
+        P = 0
     # alpha, tau, G = NxN and x, gamma = NxP
     alpha = np.full((N, N), 0.3)
     if tau is None:
@@ -15,7 +18,7 @@ def NRTL(x, T, tau=None, a=None, b=None):
     else:
         print("wrong input:\n if tau = None then a, b must be input\n if a,b = None then tau must be input")
     gamma = np.zeros((N, P))
-    for phase in range(x.shape[1]):
+    for phase in range(P):
         xi = x[:, phase]  # mol frac is the current phase
         term1 = np.zeros(N)
         term2 = np.zeros(N)
@@ -31,12 +34,13 @@ def NRTL(x, T, tau=None, a=None, b=None):
             term2[i] = sum_j
         ln_gamma = term1 + term2
         gamma[:, phase] = np.exp(ln_gamma)
+
     return gamma, tau
 
 def LLE_solver(zi, tau, T, xi_guess, beta_guess, MW=None):
     N = zi.shape[0]
     unknowns = N*2 + 1
-    #initial flattening
+    #initial flattening to 1D vector
     xi_guess = xi_guess.flatten()
     x0_guess = np.concatenate([xi_guess, [beta_guess]])
 
@@ -71,38 +75,35 @@ def LLE_solver(zi, tau, T, xi_guess, beta_guess, MW=None):
         return
     return
 
-def fenske_multicomponent(zi=None, tau=None, T=298, yx_guess=None, beta_guess=None, MW=None):
-    #if tau is not None:
-    tau = np.array([
-        [0, 2, 3, 4],
-        [5, 0, 7, 3],
-        [9, 10, 0, 2],
-        [2, 5, 6, 0]
+def Antoine_eqn(T, component):
+    T -=273.15
+    #ln(Psat) = A - B/(T+C) in kPa and C
+    # A B C
+    abc = np.array([
+        [7.47680, 1310.40, 178.080], #Butanol
+        [7.02447, 1161.00, 224.000], #Acetone
+        [8.04494, 1554.30, 222.650], #Ethanol
+        [8.07131, 1730.63, 233.426]  #Water
     ])
-    zi = np.array([
-        [2],
-        [3],
-        [8],
-        [9]
-    ])
-    yx_guess = np.array([
-        [0.3, 0.02],
-        [0.2, 0.6],
-        [0.4, 0.08],
-        [0.1, 0.2]
-    ])
-    beta_guess = 0.07
-    N = zi.shape[0] # Components in feed
-    P = 2 # Phases (Vapor Liquid)
-    """
-     1. VLE NRTL get gamma values
-     2. Calculate relative volatitlity value for LK HK
-     3. calculate N+1 stages using fenske assuming total reflux"""
-    yx,  beta, final_gamma = LLE_solver(zi, tau, T, yx_guess, beta_guess)
-    print(yx)
-    print(beta)
-    print(final_gamma)
-    #alpha = (gamma_LK * Pvap_LK) / (gamma_HK * Pvap_HK)
-    return
+    lnPsat = abc[component, 0] - ( abc[component, 1] / ( T + abc[component, 2] ) )
+    Psat = np.exp(lnPsat)
+    return Psat
 
-fenske_multicomponent()
+#Fix Txy funciton to account for non ideal mixtures
+#Solve for activity coefficient
+def Txy(P, T_lower, T_upper, components):
+    T_range = np.linspace(T_lower, T_upper, 100)
+    def raoult_x(Psat1, Psat2):
+        x = (P-Psat2)/(Psat1 - Psat2)
+        return x
+    def raoult_y(Psat1, Psat2):
+        y = ( (Psat1 / P) * (P-Psat2)/(Psat1 - Psat2) )
+        return y
+    x = []
+    y = []
+    for i in range(len(T_range)):
+        Psat1 = Antoine_eqn(T_range[i], components[0])
+        Psat2 = Antoine_eqn(T_range[i], components[1])
+        x.append(raoult_x(Psat1, Psat2))
+        y.append(raoult_y(Psat1, Psat2))
+    return T_range, x, y
