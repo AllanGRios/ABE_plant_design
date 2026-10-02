@@ -7,6 +7,7 @@ R = 0.08206 #atm/J/k
 Streams = {
 
 }
+BAEW_tau = np.zeros([4, 4])
 
 def set_stream(Sn=str, S = 0, B = 0, A = 0, E = 0, W = 0, CO2 = 0, H2 = 0, NH4OH = 0,NH4_salts = 0):
     masses = [float(round(i, 2)) for i in [S,B,A,E,W,CO2,H2,NH4OH,NH4_salts]]
@@ -181,6 +182,7 @@ def Dec1(operating_temp):
     nsum = sum(S4[1:5:]/MW)
     # Phase composition
     xi, beta, w_org, w_aq, tau = dec1_composition_calculator(S4, operating_temp)
+    BAEW_tau = tau
     mass_org = beta * nsum * np.sum(xi[:,0] * MW)
     mass_aq = (1-beta) * nsum * np.sum(xi[:,1]* MW)
     components_org = w_org * mass_org
@@ -188,38 +190,26 @@ def Dec1(operating_temp):
     set_stream("S5", B=components_org[0], A=components_org[1], E=components_org[2], W=components_org[3])
     set_stream("S8", B=components_aq[0], A=components_aq[1], E=components_aq[2], W=components_aq[3])
     #component mass balance incorrect and total mass balance incorrect
-    D1(0.578, 373)
+    D1(373, tau)
     return
 
-def D1(w_D_btoh, operating_temp):
+def D1(operating_temp,tau):
     #azeotrope BtOH - Water ~ 0.578%wt BtOH (~0.25%mol)
     S5 = Streams["S5"]
     F = sum(S5[1:5:])
-    # F = D + B, Fzi = Dxi + Wxi
+    m_F = S5[1:5:]
+    """Psat_Water_bottom = td.Antoine_eqn(100, [5.2651, 1810.94, 244.485], True)
+    Psat_Butanol_bottom = td.Antoine_eqn(100, [4.50393,1313.878,-98.789], True)
+    Psat_Water_top = td.Antoine_eqn(117.6, [5.2651, 1810.94, 244.485], True)
+    Psat_Butanol_top = td.Antoine_eqn(100, [4.50393,1313.878,-98.789], True)"""
     w_D = np.array([
-        [w_D_btoh],#fix so w_D in mass fractions
-        [S5[2]/F],
-        [S5[3]/F],
-        [1 - w_D_btoh]
+        0.578,
+        1,
+        1,
+        0.422
     ])
-    w_B = np.array([
-        [1],
-        [0],
-        [0],
-        [0]
-    ])
-    w_F = np.array([
-        [S5[1]/F],
-        [S5[2]/F],
-        [S5[3]/F],
-        [S5[4]/F]
-    ])
-    D = F * (w_F - w_B) / (w_D - w_B)
-    W = F * (w_B - w_F) / (w_B - w_D)
-    print(F)
-    print(D)
-    print(W)
-
+    m_D = m_F * w_D
+    m_B = m_F - m_D
     return
 
 system_input(63.13)

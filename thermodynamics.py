@@ -75,35 +75,10 @@ def LLE_solver(zi, tau, T, xi_guess, beta_guess, MW=None):
         return
     return
 
-def Antoine_eqn(T, component):
-    T -=273.15
-    #ln(Psat) = A - B/(T+C) in kPa and C
-    # A B C
-    abc = np.array([
-        [7.47680, 1310.40, 178.080], #Butanol
-        [7.02447, 1161.00, 224.000], #Acetone
-        [8.04494, 1554.30, 222.650], #Ethanol
-        [8.07131, 1730.63, 233.426]  #Water
-    ])
-    lnPsat = abc[component, 0] - ( abc[component, 1] / ( T + abc[component, 2] ) )
-    Psat = np.exp(lnPsat)
+def Antoine_eqn(T, ABC, Celcius=False):
+    if Celcius==True:
+        T += 273.15
+    log_Psat = ABC[0] - ABC[1]/(T + ABC[2])
+    Psat = 10**log_Psat
     return Psat
 
-#Fix Txy funciton to account for non ideal mixtures
-#Solve for activity coefficient
-def Txy(P, T_lower, T_upper, components):
-    T_range = np.linspace(T_lower, T_upper, 100)
-    def raoult_x(Psat1, Psat2):
-        x = (P-Psat2)/(Psat1 - Psat2)
-        return x
-    def raoult_y(Psat1, Psat2):
-        y = ( (Psat1 / P) * (P-Psat2)/(Psat1 - Psat2) )
-        return y
-    x = []
-    y = []
-    for i in range(len(T_range)):
-        Psat1 = Antoine_eqn(T_range[i], components[0])
-        Psat2 = Antoine_eqn(T_range[i], components[1])
-        x.append(raoult_x(Psat1, Psat2))
-        y.append(raoult_y(Psat1, Psat2))
-    return T_range, x, y
